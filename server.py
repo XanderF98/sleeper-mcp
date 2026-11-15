@@ -12,15 +12,19 @@ Requires:      pip install "mcp>=2"
 import json
 import os
 import time
+import urllib.error
 import urllib.request
 
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 
+import luck
 from auth import EntraTokenVerifier
 
 SLEEPER_API = "https://api.sleeper.app/v1"
 LEAGUE_ID = os.environ.get("SLEEPER_LEAGUE_ID", "1389689066286489600")
+# Optional: the Sleeper username of whoever "my team" refers to.
+OWNER_USERNAME = os.environ.get("SLEEPER_USERNAME")
 
 # OAuth is switched on by setting these three environment variables. With them
 # unset the server runs without authentication, which is fine for local testing.
@@ -49,8 +53,8 @@ def auth_config() -> dict:
 mcp = MCPServer(
     "sleeper-league",
     instructions=(
-        "Read-only data for one Sleeper fantasy football league: standings, "
-        "weekly matchups, and team rosters."
+        "Read-only data for one Sleeper fantasy football league: standings, weekly "
+        "matchups, team rosters, and luck analysis (who the schedule has helped or hurt)."
     ),
     **auth_config(),
 )
@@ -68,8 +72,12 @@ def fetch(path: str, ttl_seconds: int = 60):
     request = urllib.request.Request(
         f"{SLEEPER_API}{path}", headers={"User-Agent": "sleeper-mcp-demo"}
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
-        data = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = json.load(response)
+    except (urllib.error.URLError, TimeoutError) as error:
+        # Raised errors reach the agent as text, so say something it can relay.
+        raise RuntimeError("Could not reach Sleeper's API. Try again in a minute.") from error
     _cache[path] = (now, data)
     return data
 
@@ -100,6 +108,44 @@ def player_label(player_id: str) -> str:
 
 def current_week() -> int:
     return int(fetch("/state/nfl").get("week") or 1)
+
+
+def find_team(team: str | None) -> tuple[int | None, dict[int, str]]:
+    """Resolve a team name (or part of one) to its roster_id.
+
+    With no name given, falls back to the team owned by SLEEPER_USERNAME.
+    Returns (roster_id or None, all team names by roster_id).
+    """
+    names = team_names()
+    if team:
+        matches = [rid for rid, name in names.items() if team.lower() in name.lower()]
+        return (matches[0] if len(matches) == 1 else None), names
+    if OWNER_USERNAME:
+        owner = next(
+            (u for u in fetch(f"/league/{LEAGUE_ID}/users")
+             if (u.get("display_name") or "").lower() == OWNER_USERNAME.lower()),
+            None,
+        )
+        if owner:
+            for roster in fetch(f"/league/{LEAGUE_ID}/rosters"):
+                if roster.get("owner_id") == owner["user_id"]:
+                    return roster["roster_id"], names
+    return None, names
+
+
+def season_rows() -> list[dict]:
+    """One row per team per completed regular-season week (see luck.weekly_rows)."""
+    state = fetch("/state/nfl")
+    settings = fetch(f"/league/{LEAGUE_ID}", ttl_seconds=3600).get("settings") or {}
+    regular_season_end = int(settings.get("playoff_week_start") or 15) - 1
+    # The week in progress is left out: half-played scores would skew everything.
+    last_played = int(state.get("week") or 1) - 1 if state.get("season_type") == "regular" else regular_season_end
+    last_week = min(last_played, regular_season_end)
+    matchups = {
+        week: fetch(f"/league/{LEAGUE_ID}/matchups/{week}", ttl_seconds=6 * 3600)
+        for week in range(1, last_week + 1)
+    }
+    return luck.weekly_rows(matchups, team_names())
 
 
 @mcp.tool()
@@ -139,18 +185,57 @@ def get_matchups(week: int | None = None) -> dict:
 @mcp.tool()
 def get_roster(team: str) -> dict:
     """One team's starters and bench. `team` is a team name or part of one (case-insensitive)."""
-    names = team_names()
-    matches = [rid for rid, name in names.items() if team.lower() in name.lower()]
-    if len(matches) != 1:
+    roster_id, names = find_team(team)
+    if roster_id is None:
         return {"error": f"Expected one team matching '{team}'.", "teams": sorted(names.values())}
-    roster = next(r for r in fetch(f"/league/{LEAGUE_ID}/rosters") if r["roster_id"] == matches[0])
+    roster = next(r for r in fetch(f"/league/{LEAGUE_ID}/rosters") if r["roster_id"] == roster_id)
     starters = [p for p in (roster.get("starters") or []) if p and p != "0"]
     bench = [p for p in (roster.get("players") or []) if p not in starters]
     return {
-        "team": names[matches[0]],
+        "team": names[roster_id],
         "starters": [player_label(p) for p in starters],
         "bench": [player_label(p) for p in bench],
     }
+
+
+@mcp.tool()
+def get_luck_report() -> list[dict]:
+    """Which teams the schedule has helped or hurt this season, luckiest first.
+
+    For each team: its real head-to-head record, the wins it would expect from its
+    scores alone, the difference (luck: positive is lucky, negative is unlucky), its
+    all-play record against the whole league, and its record against the weekly median.
+    Use this for questions about luck, who is better or worse than their record, or
+    who has had the hardest schedule. Covers completed regular-season weeks only.
+    """
+    return luck.luck_table(season_rows())
+
+
+@mcp.tool()
+def get_team_report(team: str | None = None) -> dict:
+    """Why one team's season is going the way it is: week-by-week scores, weekly rank,
+    opponent, result, and bench points, plus a summary with luck and league averages.
+
+    `team` is a team name or part of one. Leave it empty for the user's own team
+    ("my team", "how am I doing", "why am I losing").
+    """
+    roster_id, names = find_team(team)
+    if roster_id is None:
+        problem = f"Expected one team matching '{team}'." if team else "I don't know which team is yours. Ask with a team name."
+        return {"error": problem, "teams": sorted(names.values())}
+    return luck.team_report(season_rows(), names[roster_id])
+
+
+@mcp.tool()
+def get_weekly_recap(week: int | None = None) -> dict:
+    """The stories of one completed week: highest and lowest score, biggest blowout,
+    closest game, the highest score that still lost, and the lowest score that won.
+    Leave week empty for the most recent completed week.
+    """
+    rows = season_rows()
+    if not rows:
+        return {"error": "No completed weeks yet this season."}
+    return luck.weekly_recap(rows, week or max(r["week"] for r in rows))
 
 
 if __name__ == "__main__":
