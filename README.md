@@ -60,6 +60,16 @@ The host supplies the port through the `PORT` environment variable.
 3. Create the connection and add it to the agent. The three tools appear with their descriptions.
 4. Ask the agent a league question in the test chat and confirm it reports using a tool.
 
+## Evaluation
+
+I test the agent with a fixed set of 16 questions in Copilot Studio's built-in evaluation: 13 that need the server, one about a team that doesn't exist, and two the agent should decline.
+
+| Run | Passed both checks | Notes |
+|---|---|---|
+| Tool selection v1, November 14, 2026 | 13 of 16 | All 13 lookup questions passed. The three others exposed gaps in the test design and one unneeded tool call. |
+
+The questions, the per-question results, and what I'm changing for the next run are in [evals/tool-selection-v1.md](evals/tool-selection-v1.md).
+
 ## Limitations and next steps
 
 - **No authentication yet.** Anyone with the URL can call the server. That is acceptable for public, read-only data, and the next step is to put OAuth in front of it.
