@@ -33,7 +33,7 @@ Standings say who is winning. They don't say who deserves to be. Your record dep
 - **Expected wins:** each week, the share of the league a team outscored, added up over the season.
 - **Luck:** real head-to-head wins minus expected wins. Positive means the schedule helped. Negative means it hurt.
 
-My league also plays the league median every week, so each team gets two results: one against its opponent and one for finishing in the top half. The median result depends only on your own score, so it's reported separately and kept out of the luck number.
+My league also plays the league median every week, so each team gets two results: one against its opponent and one for finishing in the top half. The tools report an overall record that counts both, plus each one separately. The median result depends only on your own score, so it's kept out of the luck number. The server reads Sleeper's `league_average_match` setting, so leagues without a median game just get head-to-head records.
 
 The maths lives in `luck.py` as plain functions, and `tests/test_luck.py` checks it against a made-up four-team league with hand-calculated answers.
 

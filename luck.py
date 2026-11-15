@@ -78,8 +78,12 @@ def _result(row: dict) -> str | None:
     return "T"
 
 
-def luck_table(rows: list[dict]) -> list[dict]:
-    """One line per team, luckiest first."""
+def luck_table(rows: list[dict], median_game: bool = False) -> list[dict]:
+    """One line per team, luckiest first.
+
+    With median_game on, each team's overall record counts both weekly results:
+    the head-to-head game and the game against the league median.
+    """
     by_team: dict[str, list[dict]] = defaultdict(list)
     for row in rows:
         by_team[row["team"]].append(row)
@@ -93,16 +97,22 @@ def luck_table(rows: list[dict]) -> list[dict]:
         all_play_wins = sum(w["all_play_wins"] for w in weeks)
         all_play_games = sum(w["teams_that_week"] - 1 for w in weeks)
         median_wins = sum(1 for w in weeks if w["beat_median"])
-        table.append(
+        median_losses = len(weeks) - median_wins
+        line = {"team": team}
+        if median_game:
+            line["overall_record"] = (
+                f"{results.count('W') + median_wins}-{results.count('L') + median_losses}"
+                + (f"-{results.count('T')}" if results.count("T") else "")
+            )
+        line.update(
             {
-                "team": team,
                 "head_to_head_record": f"{results.count('W')}-{results.count('L')}"
                 + (f"-{results.count('T')}" if results.count("T") else ""),
                 "expected_head_to_head_wins": round(expected, 1),
                 "luck": round(h2h_wins - expected, 1),
                 "all_play_record": f"{all_play_wins:g}-{all_play_games - all_play_wins:g}",
                 "all_play_win_pct": round(100 * all_play_wins / all_play_games) if all_play_games else 0,
-                "median_record": f"{median_wins}-{len(weeks) - median_wins}",
+                "median_record": f"{median_wins}-{median_losses}",
                 "points_per_week": round(sum(w["points"] for w in weeks) / len(weeks), 1),
                 "opponent_points_per_week": round(
                     sum(w["opponent_points"] for w in weeks if w["opponent_points"] is not None) / h2h_games, 1
@@ -112,18 +122,19 @@ def luck_table(rows: list[dict]) -> list[dict]:
                 "weeks_counted": len(weeks),
             }
         )
+        table.append(line)
     table.sort(key=lambda t: t["luck"], reverse=True)
     return table
 
 
-def team_report(rows: list[dict], team: str) -> dict:
+def team_report(rows: list[dict], team: str, median_game: bool = False) -> dict:
     """Week-by-week detail for one team, with a summary of where the season went."""
     mine = [r for r in rows if r["team"] == team]
     if not mine:
         return {"error": f"No completed weeks found for '{team}'."}
 
     league_average = sum(r["points"] for r in rows) / len(rows)
-    summary = next(t for t in luck_table(rows) if t["team"] == team)
+    summary = next(t for t in luck_table(rows, median_game) if t["team"] == team)
     best = max(mine, key=lambda r: r["points"])
     worst = min(mine, key=lambda r: r["points"])
 
@@ -152,7 +163,7 @@ def team_report(rows: list[dict], team: str) -> dict:
                 "opponent": r["opponent"],
                 "opponent_points": r["opponent_points"],
                 "result": _result(r),
-                "beat_median": r["beat_median"],
+                "median_result": "W" if r["beat_median"] else "L",
                 "bench_points": r["bench_points"],
             }
             for r in mine

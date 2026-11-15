@@ -54,7 +54,11 @@ mcp = MCPServer(
     "sleeper-league",
     instructions=(
         "Read-only data for one Sleeper fantasy football league: standings, weekly "
-        "matchups, team rosters, and luck analysis (who the schedule has helped or hurt)."
+        "matchups, team rosters, and luck analysis (who the schedule has helped or hurt). "
+        "If the league plays a weekly median game, each team gets two results per week: "
+        "head-to-head against its opponent, and a win or loss for finishing in the top or "
+        "bottom half of scores. Lead with the overall record, which counts both, and say "
+        "which record you mean."
     ),
     **auth_config(),
 )
@@ -134,6 +138,21 @@ def find_team(team: str | None) -> tuple[int | None, dict[int, str]]:
     return None, names
 
 
+def median_game_on() -> bool:
+    """True if the league also plays the league median every week."""
+    settings = fetch(f"/league/{LEAGUE_ID}", ttl_seconds=3600).get("settings") or {}
+    return bool(settings.get("league_average_match"))
+
+
+MEDIAN_NOTE = (
+    "This league plays two games every week: one against the scheduled opponent, and one "
+    "against the league median (a win for finishing in the top half of scores that week). "
+    "overall_record counts both. head_to_head_record and median_record split them out. "
+    "Luck only applies to head-to-head games, because the median game depends only on a "
+    "team's own score."
+)
+
+
 def season_rows() -> list[dict]:
     """One row per team per completed regular-season week (see luck.weekly_rows)."""
     state = fetch("/state/nfl")
@@ -151,7 +170,11 @@ def season_rows() -> list[dict]:
 
 @mcp.tool()
 def get_standings() -> list[dict]:
-    """League standings: every team's wins, losses, ties, points for and points against, best record first."""
+    """League standings: every team's wins, losses, ties, points for and points against, best record first.
+
+    Wins and losses come straight from Sleeper, so if the league plays a weekly median
+    game they already include it (two results per team per week).
+    """
     names = team_names()
     table = []
     for roster in fetch(f"/league/{LEAGUE_ID}/rosters"):
@@ -200,16 +223,21 @@ def get_roster(team: str) -> dict:
 
 
 @mcp.tool()
-def get_luck_report() -> list[dict]:
+def get_luck_report() -> dict:
     """Which teams the schedule has helped or hurt this season, luckiest first.
 
-    For each team: its real head-to-head record, the wins it would expect from its
-    scores alone, the difference (luck: positive is lucky, negative is unlucky), its
-    all-play record against the whole league, and its record against the weekly median.
+    For each team: its overall record, its head-to-head record, the head-to-head wins it
+    would expect from its scores alone, the difference (luck: positive is lucky, negative
+    is unlucky), its all-play record against the whole league, and its record against the
+    weekly median. The response says how to read the records for this league.
     Use this for questions about luck, who is better or worse than their record, or
     who has had the hardest schedule. Covers completed regular-season weeks only.
     """
-    return luck.luck_table(season_rows())
+    median = median_game_on()
+    response = {"teams": luck.luck_table(season_rows(), median)}
+    if median:
+        response = {"how_records_work": MEDIAN_NOTE, **response}
+    return response
 
 
 @mcp.tool()
@@ -224,7 +252,11 @@ def get_team_report(team: str | None = None) -> dict:
     if roster_id is None:
         problem = f"Expected one team matching '{team}'." if team else "I don't know which team is yours. Ask with a team name."
         return {"error": problem, "teams": sorted(names.values())}
-    return luck.team_report(season_rows(), names[roster_id])
+    median = median_game_on()
+    report = luck.team_report(season_rows(), names[roster_id], median)
+    if median and "error" not in report:
+        report = {"how_records_work": MEDIAN_NOTE, **report}
+    return report
 
 
 @mcp.tool()
