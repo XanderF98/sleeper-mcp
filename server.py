@@ -14,10 +14,37 @@ import os
 import time
 import urllib.request
 
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
+
+from auth import EntraTokenVerifier
 
 SLEEPER_API = "https://api.sleeper.app/v1"
 LEAGUE_ID = os.environ.get("SLEEPER_LEAGUE_ID", "1389689066286489600")
+
+# OAuth is switched on by setting these three environment variables. With them
+# unset the server runs without authentication, which is fine for local testing.
+ENTRA_TENANT_ID = os.environ.get("ENTRA_TENANT_ID")          # the organization's directory ID
+ENTRA_API_CLIENT_ID = os.environ.get("ENTRA_API_CLIENT_ID")  # this server's app registration
+PUBLIC_URL = os.environ.get("PUBLIC_URL")                    # e.g. https://my-server.onrender.com
+REQUIRED_SCOPE = "league.read"
+
+
+def auth_config() -> dict:
+    """Build the MCPServer auth arguments, or none if OAuth is not configured."""
+    if not (ENTRA_TENANT_ID and ENTRA_API_CLIENT_ID and PUBLIC_URL):
+        return {}
+    return {
+        "token_verifier": EntraTokenVerifier(ENTRA_TENANT_ID, ENTRA_API_CLIENT_ID),
+        "auth": AuthSettings(
+            issuer_url=f"https://login.microsoftonline.com/{ENTRA_TENANT_ID}/v2.0",
+            resource_server_url=f"{PUBLIC_URL.rstrip('/')}/mcp",
+            required_scopes=[REQUIRED_SCOPE],
+            # The verifier checks the token's audience itself.
+            validate_token_resource=False,
+        ),
+    }
+
 
 mcp = MCPServer(
     "sleeper-league",
@@ -25,6 +52,7 @@ mcp = MCPServer(
         "Read-only data for one Sleeper fantasy football league: standings, "
         "weekly matchups, and team rosters."
     ),
+    **auth_config(),
 )
 
 # Small in-memory cache so repeated questions don't hammer Sleeper's API.
