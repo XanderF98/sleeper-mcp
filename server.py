@@ -23,7 +23,7 @@ from auth import EntraTokenVerifier
 
 SLEEPER_API = "https://api.sleeper.app/v1"
 LEAGUE_ID = os.environ.get("SLEEPER_LEAGUE_ID", "1389689066286489600")
-# Optional: the Sleeper username of whoever "my team" refers to.
+# Optional: who "my team" refers to. A Sleeper display name, user ID, or team name.
 OWNER_USERNAME = os.environ.get("SLEEPER_USERNAME")
 
 # OAuth is switched on by setting these three environment variables. With them
@@ -121,15 +121,16 @@ def find_team(team: str | None) -> tuple[int | None, dict[int, str]]:
         matches = [rid for rid, name in names.items() if team.lower() in name.lower()]
         return (matches[0] if len(matches) == 1 else None), names
     if OWNER_USERNAME:
-        owner = next(
-            (u for u in fetch(f"/league/{LEAGUE_ID}/users")
-             if (u.get("display_name") or "").lower() == OWNER_USERNAME.lower()),
-            None,
-        )
-        if owner:
-            for roster in fetch(f"/league/{LEAGUE_ID}/rosters"):
-                if roster.get("owner_id") == owner["user_id"]:
-                    return roster["roster_id"], names
+        # Accept a Sleeper display name, a user ID, or the team's name.
+        wanted = OWNER_USERNAME.strip().lower()
+        owner_ids = {
+            u["user_id"]
+            for u in fetch(f"/league/{LEAGUE_ID}/users")
+            if wanted in ((u.get("display_name") or "").lower(), str(u.get("user_id")))
+        }
+        for roster in fetch(f"/league/{LEAGUE_ID}/rosters"):
+            if roster.get("owner_id") in owner_ids or names[roster["roster_id"]].lower() == wanted:
+                return roster["roster_id"], names
     return None, names
 
 

@@ -55,7 +55,7 @@ python server.py
 
 The MCP endpoint is `http://localhost:8000/mcp`.
 
-To point it at a different league, set the `SLEEPER_LEAGUE_ID` environment variable. Set `SLEEPER_USERNAME` to your Sleeper username so questions about "my team" work.
+To point it at a different league, set the `SLEEPER_LEAGUE_ID` environment variable. Set `SLEEPER_USERNAME` to your Sleeper username or your team's name so questions about "my team" work.
 
 ## Deploy
 

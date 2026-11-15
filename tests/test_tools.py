@@ -42,6 +42,12 @@ def test_team_report_defaults_to_the_owners_team():
     assert server.get_team_report()["team"] == "Aces"
 
 
+@pytest.mark.parametrize("owner", ["alice", "ALICE", "u1", "Aces", "aces "])
+def test_owner_can_be_a_display_name_user_id_or_team_name(monkeypatch, owner):
+    monkeypatch.setattr(server, "OWNER_USERNAME", owner)
+    assert server.get_team_report()["team"] == "Aces"
+
+
 def test_team_report_by_partial_name():
     assert server.get_team_report("drag")["team"] == "Dragons"
 
