@@ -1,7 +1,5 @@
 # Sleeper League MCP Server
 
-A small Model Context Protocol (MCP) server that gives an AI agent read-only access to a Sleeper fantasy football league. I built it to learn how MCP servers plug into Microsoft Copilot Studio agents, end to end: write the tools, host the server, connect an agent, and test it.
-
 ## How it works
 
 ```
