@@ -35,7 +35,7 @@ Standings say who is winning. They don't say who deserves to be. Your record dep
 
 My league also plays the league median every week, so each team gets two results: one against its opponent and one for finishing in the top half. The median result depends only on your own score, so it's reported separately and kept out of the luck number.
 
-The maths lives in `luck.py` as plain functions, and `tests/test_luck.py` checks it against a four-team league I worked out by hand.
+The maths lives in `luck.py` as plain functions, and `tests/test_luck.py` checks it against a made-up four-team league with hand-calculated answers.
 
 ## Design choices
 
