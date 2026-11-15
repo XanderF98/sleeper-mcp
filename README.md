@@ -70,6 +70,16 @@ I test the agent with a fixed set of 16 questions in Copilot Studio's built-in e
 
 The questions, the per-question results, and what I'm changing for the next run are in [evals/tool-selection-v1.md](evals/tool-selection-v1.md).
 
+## What went wrong along the way
+
+Three things stopped me before the agent answered its first question, and none of them were in the code.
+
+- **Python wasn't installed.** Windows said `'pip' is not recognized`. After installing Python, `py -m pip install` worked where plain `pip` hadn't.
+- **Copilot Studio wouldn't create an agent.** A brand-new Microsoft 365 organization has no Dataverse database, and agents are stored there. As the admin I had to add Dataverse to the default environment in the Power Platform admin center.
+- **The first test message failed with "You need credits to continue."** The MCP connection was fine and the three tools had loaded. The environment just had zero Copilot credits. Activating the Copilot Studio trial from the admin center's Marketplace fixed it, a few minutes after checkout.
+
+The setup around the agent took longer than the server did.
+
 ## Limitations and next steps
 
 - **No authentication yet.** Anyone with the URL can call the server. That is acceptable for public, read-only data, and the next step is to put OAuth in front of it.
