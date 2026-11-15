@@ -19,8 +19,23 @@ Copilot Studio agent  --MCP (Streamable HTTP)-->  this server (hosted on Render)
 | `get_standings` | Every team's wins, losses, ties, points for and points against, best record first |
 | `get_matchups` | Head-to-head matchups and scores for a week (defaults to the current NFL week) |
 | `get_roster` | One team's starters and bench, with player names, positions and NFL teams |
+| `get_luck_report` | Which teams the schedule has helped or hurt, luckiest first |
+| `get_team_report` | One team's season week by week, with where it ranked each week and how lucky it has been |
+| `get_weekly_recap` | One week's stories: biggest blowout, closest game, the highest score that still lost |
 
 The description on each tool matters as much as the code. It is the only thing the agent sees when it decides whether to call the tool.
+
+## Luck analysis
+
+Standings say who is winning. They don't say who deserves to be. Your record depends on who you happened to play each week, and your score doesn't, so the luck tools compare every team's score against the whole league every week.
+
+- **All-play record:** how a team would have done playing every other team each week.
+- **Expected wins:** each week, the share of the league a team outscored, added up over the season.
+- **Luck:** real head-to-head wins minus expected wins. Positive means the schedule helped. Negative means it hurt.
+
+My league also plays the league median every week, so each team gets two results: one against its opponent and one for finishing in the top half. The median result depends only on your own score, so it's reported separately and kept out of the luck number.
+
+The maths lives in `luck.py` as plain functions, and `tests/test_luck.py` checks it against a made-up four-team league with hand-calculated answers.
 
 ## Design choices
 
@@ -40,7 +55,7 @@ python server.py
 
 The MCP endpoint is `http://localhost:8000/mcp`.
 
-To point it at a different league, set the `SLEEPER_LEAGUE_ID` environment variable.
+To point it at a different league, set the `SLEEPER_LEAGUE_ID` environment variable. Set `SLEEPER_USERNAME` to your Sleeper username so questions about "my team" work.
 
 ## Deploy
 
@@ -55,7 +70,7 @@ The host supplies the port through the `PORT` environment variable.
 
 1. In the agent, add a tool and choose Model Context Protocol.
 2. Enter the server's public URL ending in `/mcp`. Choose no authentication for an open server, or OAuth 2.0 for a protected one (see Authentication below).
-3. Create the connection and add it to the agent. The three tools appear with their descriptions.
+3. Create the connection and add it to the agent. The tools appear with their descriptions.
 4. Ask the agent a league question in the test chat and confirm it reports using a tool.
 
 ## Authentication
@@ -121,7 +136,8 @@ The setup around the agent took longer than the server did.
 
 - **No per-user permissions.** OAuth controls who can call the server, but every signed-in user sees the same league. There is one scope, `league.read`.
 - **One league.** The league ID is set by configuration, not chosen per user.
-- **Three tools.** Trending players and waiver-wire activity are natural additions.
+- **No waiver or trade data yet.** Trending players and waiver-wire activity are natural additions.
+- **Luck covers scores only.** It doesn't judge lineup decisions, such as points left on the bench in the wrong slot.
 
 ## A note on how this was built
 
