@@ -52,6 +52,19 @@ def test_luck_table_matches_hand_calculation():
     assert table["Dragons"]["luck"] == 0.0
 
 
+def test_overall_record_adds_the_median_game():
+    # Aces: 2-1 head-to-head, top half every week (3-0 vs median), so 5-1 overall.
+    # Bandits: 2-1 head-to-head, top half once (1-2 vs median), so 3-3 overall.
+    table = by_team(luck.luck_table(ROWS, median_game=True))
+    assert table["Aces"]["overall_record"] == "5-1"
+    assert table["Bandits"]["overall_record"] == "3-3"
+    assert table["Dragons"]["overall_record"] == "0-6"
+
+
+def test_no_overall_record_without_a_median_game():
+    assert "overall_record" not in luck.luck_table(ROWS)[0]
+
+
 def test_luckiest_team_comes_first():
     assert luck.luck_table(ROWS)[0]["team"] == "Bandits"
 
@@ -74,6 +87,14 @@ def test_team_report_finds_the_unlucky_loss():
     assert summary["league_average_points_per_week"] == 95.4
     assert report["weeks"][0]["bench_points"] == 12.5
     assert [w["result"] for w in report["weeks"]] == ["W", "L", "W"]
+    assert [w["median_result"] for w in report["weeks"]] == ["W", "W", "W"]
+
+
+def test_team_report_with_median_game():
+    summary = luck.team_report(ROWS, "Bandits", median_game=True)["summary"]
+    assert summary["overall_record"] == "3-3"
+    assert summary["head_to_head_record"] == "2-1"
+    assert summary["median_record"] == "1-2"
 
 
 def test_team_report_for_unknown_team():

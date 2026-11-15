@@ -14,7 +14,7 @@ from fixtures import MATCHUPS, ROSTERS, USERS  # noqa: E402
 L = server.LEAGUE_ID
 RESPONSES = {
     "/state/nfl": {"week": 4, "season_type": "regular"},
-    f"/league/{L}": {"settings": {"playoff_week_start": 15}},
+    f"/league/{L}": {"settings": {"playoff_week_start": 15, "league_average_match": 1}},
     f"/league/{L}/users": USERS,
     f"/league/{L}/rosters": ROSTERS,
     **{f"/league/{L}/matchups/{week}": entries for week, entries in MATCHUPS.items()},
@@ -34,8 +34,25 @@ def test_week_in_progress_is_left_out():
 
 def test_luck_report_tool():
     report = server.get_luck_report()
-    assert [t["team"] for t in report][0] == "Bandits"
-    assert len(report) == 4
+    assert report["teams"][0]["team"] == "Bandits"
+    assert len(report["teams"]) == 4
+    assert "median" in report["how_records_work"]
+    assert report["teams"][0]["overall_record"] == "3-3"
+
+
+def test_team_report_explains_the_median_game():
+    report = server.get_team_report("Aces")
+    assert "two games every week" in report["how_records_work"]
+    assert report["summary"]["overall_record"] == "5-1"
+
+
+def test_no_median_note_when_the_league_has_no_median_game(monkeypatch):
+    responses = dict(RESPONSES)
+    responses[f"/league/{L}"] = {"settings": {"playoff_week_start": 15}}
+    monkeypatch.setattr(server, "fetch", lambda path, ttl_seconds=60: responses[path])
+    report = server.get_luck_report()
+    assert "how_records_work" not in report
+    assert "overall_record" not in report["teams"][0]
 
 
 def test_team_report_defaults_to_the_owners_team():
