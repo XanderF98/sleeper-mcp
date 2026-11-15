@@ -97,7 +97,7 @@ In Copilot Studio the tool's connection uses OAuth 2.0 with manual settings: the
 
 ### How I tested it
 
-- Nine cases with tokens I generated locally: valid tokens in both of Entra's formats were accepted; a missing token, wrong audience, another tenant's token, an expired token, a forged signature and a garbage string were all refused; a token without the scope got a 403.
+- `tests/test_auth.py` covers nine cases with locally signed tokens: valid tokens in both of Entra's formats are accepted; a missing token, wrong audience, another tenant's token, an expired token, a forged signature and a garbage string are all refused; a token without the scope gets a 403. Run them with `pip install pytest && pytest`.
 - End to end on November 14, 2026: opening the server's address in a browser returned `invalid_token`, and the agent, signed in through Entra ID, answered a standings question with `200 OK` in the server log.
 
 ## Evaluation
